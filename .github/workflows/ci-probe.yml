@@ -5,6 +5,17 @@ on:
   workflow_dispatch:
 jobs:
   probe:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
-      - run: echo "actions-ok"
+      - uses: actions/checkout@v4
+      - name: make file
+        shell: pwsh
+        run: |
+          "hello-artifact" | Out-File -Encoding utf8 hello.txt
+          Get-ComputerInfo -Property OsName,OsVersion | Out-String | Out-File info.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: probe-artifact
+          path: |
+            hello.txt
+            info.txt
