@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allram"
+version = "1.0.0"
+description = "AllRAM — используйте свободное место SSD как дополнительную оперативную память Windows (терминальная утилита)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "AllRAM contributors" }]
+keywords = ["windows", "ram", "pagefile", "ssd", "memory", "cli", "ramdisk"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pyinstaller>=6.6,<7", "pytest>=8,<10"]
+
+[project.scripts]
+allram = "allram.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/1xcoding/allram"
+Source = "https://github.com/1xcoding/allram"
+
+[tool.setuptools]
+py-modules = ["allram_main"]
+packages = ["allram"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
