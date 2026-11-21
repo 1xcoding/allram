@@ -39,7 +39,7 @@ def _emit_json(data: Any) -> None:
 def _need_windows(console: Console, action: str) -> bool:
     if util.is_windows():
         return True
-    console.error(f"{action} доступно только в Windows.")
+    console.error(f"Действие «{action}» доступно только в Windows.")
     console.muted("Запустите AllRAM на Windows — остальные команды работают и здесь.")
     return False
 
@@ -112,7 +112,9 @@ def render_status(console: Console, data: dict[str, Any]) -> None:
 
     ram = data.get("ramdisk", {})
     console.section("RAM-диск (ImDisk)")
-    if ram.get("installed"):
+    if not util.is_windows():
+        console.muted("  доступно только в Windows")
+    elif ram.get("installed"):
         console.print("  ImDisk: установлен" + (" · драйвер активен" if ram.get("driver_loaded") else " · драйвер не загружен"))
         devices = ram.get("devices") or []
         for device in devices:
@@ -122,15 +124,16 @@ def render_status(console: Console, data: dict[str, Any]) -> None:
     else:
         console.muted("  ImDisk не установлен (allram ramdisk --install-imdisk)")
     for note in ram.get("notes") or []:
-        if "ImDisk не установлен" in str(note):
+        note = str(note)
+        if "ImDisk не установлен" in note or "доступен только в Windows" in note:
             continue  # уже сказали строкой выше
-        console.muted("  " + str(note))
+        console.muted("  " + note)
 
-    registry_ram = data.get("physical_memory_registry")
     console.section("Реестр")
+    registry_ram = data.get("physical_memory_registry")
     if registry_ram:
         console.print(f"  HARDWARE\\RESOURCEMAP: ОЗУ в системе — {util.human_bytes(registry_ram)}")
-    console.muted("  запись PagingFiles: HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management")
+    console.muted("  PagingFiles: HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management")
 
 
 def cmd_status(args: argparse.Namespace, console: Console, store: StateStore) -> int:
@@ -255,7 +258,7 @@ def cmd_setup(args: argparse.Namespace, console: Console, store: StateStore) -> 
 
 
 def cmd_auto(args: argparse.Namespace, console: Console, store: StateStore) -> int:
-    if not _need_windows(console, "Автоподбор"):
+    if not _need_windows(console, "автоподбор настроек подкачки"):
         return 1
 
     info = memory.memory_info()
@@ -280,9 +283,10 @@ def cmd_auto(args: argparse.Namespace, console: Console, store: StateStore) -> i
     _print_plan(console, plan, plan_info)
 
     if not args.apply:
-        console.muted("Чтобы применить: allram auto --apply")
-        if args.json:
+        if getattr(args, "json", False):
             _emit_json(plan_info.as_dict())
+        else:
+            console.muted("Чтобы применить: allram auto --apply")
         return 0
 
     if not _need_admin(console, "запись в реестр"):
@@ -469,7 +473,7 @@ def cmd_bench(args: argparse.Namespace, console: Console, store: StateStore) -> 
     console.muted("Замер ОЗУ и диска… это займёт несколько секунд")
     result = benchmark.run(drive, ram_mib=args.ram_mib, disk_mib=args.disk_mib)
     data = result.as_dict()
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json(data)
         return 0
     console.table(
@@ -527,7 +531,7 @@ def cmd_models(args: argparse.Namespace, console: Console, store: StateStore) ->
         )
         for note in estimate.notes:
             console.muted("  " + note)
-        if args.json:
+        if getattr(args, "json", False):
             _emit_json(estimate.as_dict())
     console.muted("Оценки приблизительные: реальная скорость зависит от процессора, GPU и самой модели.")
     return 0
@@ -540,7 +544,7 @@ def cmd_models(args: argparse.Namespace, console: Console, store: StateStore) ->
 
 def cmd_explain(args: argparse.Namespace, console: Console, store: StateStore) -> int:
     text = report.explain_text()
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json({"text": text})
         return 0
     console.title("AllRAM — как это работает")
@@ -550,7 +554,7 @@ def cmd_explain(args: argparse.Namespace, console: Console, store: StateStore) -
 
 def cmd_recommend(args: argparse.Namespace, console: Console, store: StateStore) -> int:
     recommendations, summary = report.recommendation_report()
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json(summary)
         return 0
     console.title("AllRAM — рекомендации")
@@ -573,7 +577,7 @@ def cmd_watch(args: argparse.Namespace, console: Console, store: StateStore) -> 
                 interval=args.interval,
                 threshold=args.threshold,
                 once=args.once,
-                json_output=args.json,
+                json_output=getattr(args, "json", False),
                 max_runs=args.runs,
             ),
             console,
@@ -584,7 +588,7 @@ def cmd_watch(args: argparse.Namespace, console: Console, store: StateStore) -> 
 
 def cmd_install(args: argparse.Namespace, console: Console, store: StateStore) -> int:
     result = installer.install(store, autostart=not args.no_autostart)
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json(result)
         return 0 if result.get("success") else 1
     console.title("AllRAM — установка")
@@ -601,7 +605,7 @@ def cmd_install(args: argparse.Namespace, console: Console, store: StateStore) -
 
 def cmd_uninstall(args: argparse.Namespace, console: Console, store: StateStore) -> int:
     result = installer.uninstall(store, remove_pagefile=args.restore_pagefile)
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json(result)
         return 0
     console.title("AllRAM — удаление")
@@ -613,7 +617,7 @@ def cmd_uninstall(args: argparse.Namespace, console: Console, store: StateStore)
 
 def cmd_history(args: argparse.Namespace, console: Console, store: StateStore) -> int:
     entries = store.history()
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json(entries)
         return 0
     console.title("AllRAM — журнал")
@@ -626,9 +630,9 @@ def cmd_history(args: argparse.Namespace, console: Console, store: StateStore) -
 
 
 def cmd_backup(args: argparse.Namespace, console: Console, store: StateStore) -> int:
-    path = util.data_dir() / "export.json"
-    if args.output:
-        path = util.Path(args.output) if hasattr(util, "Path") else path
+    from pathlib import Path as _Path
+
+    path = _Path(args.output).expanduser() if args.output else util.data_dir() / "export.json"
     store.export_json(path)
     console.ok(f"Данные сохранены: {path}")
     return 0
@@ -698,7 +702,7 @@ def cmd_presets(args: argparse.Namespace, console: Console, store: StateStore) -
     if drives:
         free = max(util.free_space(f"{letter}:\\") for letter in drives)
     rows = []
-    if args.json:
+    if getattr(args, "json", False):
         _emit_json([preset.__dict__ for preset in presets.list_presets()])
         return 0
     console.title("AllRAM — профили")
@@ -908,6 +912,10 @@ def _menu(console: Console, options: list[str]) -> int:
 
 
 def _run_menu(console: Console, store: StateStore, func: Callable[..., int], args: argparse.Namespace) -> None:
+    # В интерактивном меню Namespace собирается вручную — добавляем общие флаги.
+    for name, default in (("json", False), ("no_color", False)):
+        if not hasattr(args, name):
+            setattr(args, name, default)
     try:
         func(args, console, store)
     except (pagefile.PagefileError, imdisk.RamdiskError, registry.RegistryError) as exc:

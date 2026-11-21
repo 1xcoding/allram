@@ -305,50 +305,72 @@ def physical_memory_from_registry() -> int | None:
 
 
 def _sum_resource_list_memory(blob: bytes) -> int:
-    """Разбирает CM_RESOURCE_LIST и суммирует длины блоков физической памяти.
+    """Суммирует длины блоков физической памяти из CM_RESOURCE_LIST.
 
-    Формат (Windows x64):
-      заголовок списка — 4 байта Count + 3 байта выравнивания;
-      CM_FULL_RESOURCE_DESCRIPTOR: InterfaceType(4) BusNumber(4) Type(1) Shared(1) + Count(2);
-      CM_PARTIAL_RESOURCE_DESCRIPTOR: Type(1) ShareDisposition(1) Flags(2) + 8 байт Start + 8 байт Length.
-    Тип 3 (CmResourceTypeMemory) и 7 (CmResourceTypeMemoryLarge) содержат блок ОЗУ.
+    Документированная раскладка (x64, выравнивание 8 байт):
+      0   Count                       (ULONG, 4)
+      4   InterfaceType               (ULONG, 4)
+      8   BusNumber                   (ULONG, 4)
+      12  Version (USHORT), Revision (USHORT)
+      16  Count дескрипторов          (ULONG, 4)
+      20  выравнивание до 8 байт
+      24  CM_PARTIAL_RESOURCE_DESCRIPTOR[Count]:
+            Type(1) ShareDisposition(1) Flags(2) + объединение (16 байт);
+            для Type 3 (Memory)  — Start (8) + Length (4);
+            для Type 7 (MemoryLarge) — Length в старших 32 битах.
+    Если раскладка не совпала (бывает на отдельных сборках Windows),
+    используется запасной приём: последние 8 байт значения содержат длину
+    самого большого блока памяти.
     """
     try:
-        if len(blob) < 4:
-            return 0
-        total = 0
-        offset = 0
-        list_count = int.from_bytes(blob[0:4], "little") or 1
-        offset = 4
-        for _ in range(min(list_count, 256)):
-            if offset + 9 > len(blob):
-                break
-            offset += 8  # InterfaceType + BusNumber
-            offset += 2  # Type + Shared
-            count = int.from_bytes(blob[offset : offset + 2], "little")
-            offset += 4  # Count + 2 байта выравнивания
-            for _descriptor in range(min(count, 256)):
-                if offset + 4 > len(blob):
-                    return total
-                kind = blob[offset]
-                offset += 4
-                if kind in (3, 7):
-                    if offset + 16 > len(blob):
-                        return total
-                    length = int.from_bytes(blob[offset + 8 : offset + 16], "little")
-                    if kind == 7:  # MemoryLarge: Length — младшие 32 бита в старших 4 байтах значения
-                        length = int.from_bytes(blob[offset + 12 : offset + 16], "little") << 32
-                    total += length
-                    offset += 16
-                elif kind == 1:  # Port
-                    offset += 8
-                elif kind in (2, 4, 5, 6, 8, 9):  # Interrupt/DMA/DeviceSpecific/BusNumber/MemoryLarge40/ConfigData
-                    offset += 16
-                else:
-                    return total
-        return total
+        total = _parse_resource_list(blob)
+        if total > 0:
+            return total
+        return _memory_from_tail(blob)
     except Exception:  # pragma: no cover
         return 0
+
+
+def _parse_resource_list(blob: bytes) -> int:
+    if len(blob) < 24:
+        return 0
+    list_count = max(1, int.from_bytes(blob[0:4], "little"))
+    offset = 4
+    total = 0
+    for _ in range(min(list_count, 64)):
+        if offset + 20 > len(blob):
+            break
+        offset += 8  # InterfaceType + BusNumber
+        offset += 4  # Version + Revision
+        count = int.from_bytes(blob[offset : offset + 4], "little")
+        offset += 8  # Count + выравнивание до 8 байт
+        if count <= 0 or count > 256:
+            break
+        for _descriptor in range(count):
+            if offset + 20 > len(blob):
+                return total
+            kind = blob[offset]
+            if kind == 3:  # CmResourceTypeMemory
+                length = int.from_bytes(blob[offset + 12 : offset + 16], "little")
+                start = int.from_bytes(blob[offset + 4 : offset + 12], "little")
+                if start < (1 << 40) and 0 < length < (1 << 40):
+                    total += length
+            elif kind == 7:  # CmResourceTypeMemoryLarge: Length в единицах 4 ГиБ
+                length = int.from_bytes(blob[offset + 12 : offset + 16], "little") * (1 << 32)
+                if 0 < length < (1 << 46):
+                    total += length
+            offset += 20
+    return total
+
+
+def _memory_from_tail(blob: bytes) -> int:
+    """Запасной вариант: длина памяти в последних 8 байтах значения."""
+    if len(blob) < 8:
+        return 0
+    length = int.from_bytes(blob[-8:], "little")
+    if 0 < length < (1 << 44) and length % 4096 == 0:
+        return length
+    return 0
 
 
 def cpu_brand_from_registry() -> str | None:

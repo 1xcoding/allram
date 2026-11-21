@@ -119,16 +119,13 @@ def status() -> ImDiskStatus:
 
 
 def installed_version() -> str | None:
+    """Путь к драйверу ImDisk из реестра (для отчёта `allram status`)."""
     if not util.is_windows():
         return None
     for name in registry.imdisk_services():
-        value = registry.read_value(
-            __import__("winreg").HKEY_LOCAL_MACHINE,
-            rf"SYSTEM\CurrentControlSet\Services\{name}",
-            "ImagePath",
-        )
+        value = registry.read_value(registry.winreg.HKEY_LOCAL_MACHINE, rf"SYSTEM\CurrentControlSet\Services\{name}", "ImagePath")
         if value:
-            return name
+            return f"{name}: {value[0]}"
     return None
 
 
@@ -262,7 +259,6 @@ def install_imdisk(*, silent: bool = True) -> dict[str, Any]:
         candidates = list(extract_dir.glob("*.exe"))
         if not candidates:
             raise RamdiskError("в архиве ImDisk не найден установщик")
-        package.uninstall_hint = "удалите каталог ImDisk вручную"  # type: ignore[attr-defined]
         package = candidates[0]
 
     args = [str(package)]

@@ -156,7 +156,12 @@ def status_report() -> dict[str, Any]:
             "existing_files": settings.existing_files,
             "allram_active": any("pagefile_allram.sys" in text.lower() for text in settings.paging_files),
         }
-        out["physical_memory_registry"] = memory.physical_memory_from_registry()
+        registry_ram = memory.physical_memory_from_registry()
+        # Значение в HARDWARE\RESOURCEMAP — снимок для отображения; если разбор
+        # дал неправдоподобный результат, показываем данные Win32 API.
+        if registry_ram and info.total_bytes and not (0.5 <= registry_ram / info.total_bytes <= 2):
+            registry_ram = None
+        out["physical_memory_registry"] = registry_ram or info.total_bytes
     from . import imdisk
 
     ram = imdisk.status()
