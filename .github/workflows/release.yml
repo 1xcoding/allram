@@ -49,6 +49,19 @@ jobs:
             throw "Сборка завершилась с кодом $code"
           }
 
+      - name: Smoke test exe
+        shell: pwsh
+        run: |
+          $out = & .\dist\allram.exe --version
+          Write-Output $out
+          if ($LASTEXITCODE -ne 0) { throw "allram.exe --version завершился с ошибкой" }
+          $json = & .\dist\allram.exe presets --json --no-color
+          if ($LASTEXITCODE -ne 0) { throw "allram.exe presets завершился с ошибкой" }
+          $parsed = $json | ConvertFrom-Json
+          if ($parsed.Count -lt 5) { throw "Ожидалось 5 профилей, получено $($parsed.Count)" }
+          & .\dist\allram.exe status --no-color | Select-Object -First 8
+          Write-Output "SMOKE OK"
+
       - name: Check version
         id: version
         shell: pwsh
