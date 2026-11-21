@@ -15,9 +15,23 @@
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-0078D6" alt="Windows 10/11">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
   <img src="https://img.shields.io/badge/tests-59%20passed-brightgreen" alt="Тесты">
+  <img src="https://img.shields.io/badge/размер-8.8%20МБ-blue" alt="Размер exe">
 </p>
 
-![AllRAM в терминале](docs/demo.png)
+<p align="center">
+  <img src="docs/screenshot.png" width="720" alt="allram status">
+</p>
+
+> На снимках — типовой ноутбук (16 ГиБ ОЗУ, расширение на D: 30 ГиБ).
+> Значения подставлены для наглядности: на сервере без Windows подкачки нет.
+
+| План расширения | Скорость ОЗУ против SSD |
+| --- | --- |
+| ![allram setup](docs/setup.png) | ![allram bench](docs/bench.png) |
+
+| Нейросети: что поместится |
+| --- |
+| ![allram models](docs/models.png) |
 
 ---
 
@@ -45,23 +59,14 @@ SSD настоящую оперативную память — она прост
 но быстрее, чем на голом SSD, они не станут. `allram bench` показывает разницу
 в развлечение и для понимания.
 
-## Скриншот и демонстрация
+## Релиз 1.0.0
 
+- [`allram.exe`](../../releases/latest/download/allram.exe) — один файл, 8.8 МБ, без Python и DLL.
+- [`allram-win64.zip`](../../releases/latest/download/allram-win64.zip) — exe + README + контрольная сумма.
+- [`SHA256SUMS.txt`](../../releases/latest/download/SHA256SUMS.txt) — контрольная сумма; сверьте её с `certutil -hashfile allram.exe SHA256`.
+
+Собран на Windows 11 в GitHub Actions, тесты прогоняются перед публикацией.
 Терминал, никакого GUI. Полный текстовый лог — в [`docs/demo.txt`](docs/demo.txt).
-
-```
- AllRAM — состояние
-──────────────────────────────────────────────────────────────────────────
-Оперативная память         16.0 ГиБ
-Занято                     62 %  (9.9 ГиБ)
-Свободно ОЗУ               6.1 ГиБ
-Файл подкачки сейчас       2.4 ГиБ
-Всего памяти для программ  18.4 ГиБ
-
-Подкачка (расширение памяти на SSD)
-  режим: Windows управляет автоматически
-  файлы: C:\pagefile.sys — 0 МиБ
-```
 
 ## Установка
 

@@ -120,8 +120,10 @@ def render_status(console: Console, data: dict[str, Any]) -> None:
         if not devices:
             console.muted("  RAM-дисков пока нет")
     else:
-        console.muted("  ImDisk не установлен")
+        console.muted("  ImDisk не установлен (allram ramdisk --install-imdisk)")
     for note in ram.get("notes") or []:
+        if "ImDisk не установлен" in str(note):
+            continue  # уже сказали строкой выше
         console.muted("  " + str(note))
 
     registry_ram = data.get("physical_memory_registry")
@@ -491,10 +493,20 @@ def cmd_bench(args: argparse.Namespace, console: Console, store: StateStore) -> 
 def cmd_models(args: argparse.Namespace, console: Console, store: StateStore) -> int:
     info = memory.memory_info()
     bench = benchmark.run(ram_mib=48, disk_mib=16)
+    capacity = info.commit_limit if info.commit_limit > info.total_bytes else info.total_bytes
     console.title("AllRAM — оценка для нейросетей")
-    console.muted(f"доступно памяти: ОЗУ {util.human_bytes(info.total_bytes)}, всего с подкачкой {util.human_bytes(info.commit_limit)}")
+    if info.commit_limit > info.total_bytes:
+        console.muted(
+            f"доступно памяти: ОЗУ {util.human_bytes(info.total_bytes)}, "
+            f"всего с подкачкой {util.human_bytes(info.commit_limit)}"
+        )
+    else:
+        console.muted(
+            f"доступно памяти: {util.human_bytes(capacity)} (Windows не сообщает объём подкачки — "
+            "после allram setup здесь появится суммарный объём)"
+        )
     rows = []
-    for name, size, fits in presets.models_table(info.commit_limit):
+    for name, size, fits in presets.models_table(capacity):
         rows.append((name, util.human_bytes(size), "поместится" if fits else "не поместится"))
     console.table(rows, header=("Модель", "Примерно нужно", "Поместится?"))
     if args.model:
@@ -502,7 +514,7 @@ def cmd_models(args: argparse.Namespace, console: Console, store: StateStore) ->
         if size is None:
             console.error(f"Не удалось определить размер модели {args.model!r}. Укажите параметры, например 13b.")
             return 1
-        estimate = benchmark.estimate_model(size, bench, info.total_bytes, info.commit_limit)
+        estimate = benchmark.estimate_model(size, bench, info.total_bytes, capacity)
         console.section(f"Модель {args.model}")
         console.table(
             [
