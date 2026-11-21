@@ -12,6 +12,18 @@ import struct
 import zlib
 from pathlib import Path
 
+def _utf8_console() -> None:
+    """Windows-консоль по умолчанию cp1251/cp1252 — переключаем вывод на UTF-8."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+
+_utf8_console()
+
+
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
 SIZES = (16, 24, 32, 48, 64, 128, 256)
