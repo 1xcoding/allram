@@ -36,7 +36,15 @@ jobs:
         run: python -m pytest -q
 
       - name: Build allram.exe
-        run: python scripts/build.py --clean
+        shell: pwsh
+        run: |
+          python scripts/build.py --clean *> build.log
+          $code = $LASTEXITCODE
+          Get-Content build.log -Tail 30 | ForEach-Object { Write-Output $_ }
+          if ($code -ne 0) {
+            Get-Content build.log -Tail 15 | ForEach-Object { Write-Output "::error title=build::$_" }
+            throw "Сборка завершилась с кодом $code"
+          }
 
       - name: Check version
         id: version
