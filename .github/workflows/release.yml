@@ -1,0 +1,104 @@
+name: build-and-release
+
+# Собирает allram.exe на настоящей Windows, прогоняет тесты и публикует релиз.
+on:
+  push:
+    branches: ['main', 'arena/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Windows build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dev tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run tests
+        env:
+          ALLRAM_HOME: ${{ runner.temp }}\allram-home
+        run: python -m pytest -q
+
+      - name: Build allram.exe
+        shell: pwsh
+        run: |
+          python scripts/build.py --clean *> build.log
+          $code = $LASTEXITCODE
+          Get-Content build.log -Tail 30 | ForEach-Object { Write-Output $_ }
+          if ($code -ne 0) {
+            Get-Content build.log -Tail 15 | ForEach-Object { Write-Output "::error title=build::$_" }
+            throw "Сборка завершилась с кодом $code"
+          }
+
+      - name: Smoke test exe
+        shell: pwsh
+        run: |
+          $out = & .\dist\allram.exe --version
+          Write-Output $out
+          if ($LASTEXITCODE -ne 0) { throw "allram.exe --version завершился с ошибкой" }
+          $json = & .\dist\allram.exe presets --json --no-color
+          if ($LASTEXITCODE -ne 0) { throw "allram.exe presets завершился с ошибкой" }
+          $parsed = $json | ConvertFrom-Json
+          if ($parsed.Count -lt 5) { throw "Ожидалось 5 профилей, получено $($parsed.Count)" }
+          & .\dist\allram.exe status --no-color | Select-Object -First 8
+          Write-Output "SMOKE OK"
+
+      - name: Check version
+        id: version
+        shell: pwsh
+        run: |
+          $v = python -c "import allram; print(allram.__version__)"
+          "value=$v" >> $env:GITHUB_OUTPUT
+          Write-Output "Версия: $v"
+
+      - name: Pack zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\allram.exe, dist\SHA256SUMS.txt, README.md, LICENSE `
+                           -DestinationPath dist\allram-win64.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allram-win64
+          path: |
+            dist/allram.exe
+            dist/allram-win64.zip
+            dist/SHA256SUMS.txt
+          retention-days: 30
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          $tag = "v$env:VERSION"
+          Write-Output "Публикую релиз $tag"
+          gh release view $tag 1>$null 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "AllRAM $tag" --notes-file docs/release-notes.md
+          }
+          gh release upload $tag dist\allram.exe dist\allram-win64.zip dist\SHA256SUMS.txt --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Не удалось загрузить файлы релиза" }
+          gh release view $tag --json url,assets --jq '.url, (.assets[].name)'
